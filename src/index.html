@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+    />
+    <link
+      rel="stylesheet"
+      href="https://code.getmdl.io/1.3.0/material.indigo-pink.min.css"
+    />
+    <script defer src="https://code.getmdl.io/1.3.0/material.min.js"></script>
+
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tauri App</title>
+    <script type="module" src="/main.js" defer></script>
+    <style>
+      .logo.vanilla:hover {
+        filter: drop-shadow(0 0 2em #ffe21c);
+      }
+    </style>
+    <script>
+      const { invoke } = window.__TAURI__.tauri;
+
+      async function pos() {
+        let data = await invoke("get_queue");
+
+        console.log(data);
+      }
+    </script>
+  </head>
+
+  <body>
+    <div data-tauri-drag-region class="titlebar">
+      <div class="titlebar-button" id="titlebar-minimize">
+        <img
+          src="./assets/window-minimize.svg"
+          alt="minimize"
+          style="color: #ffe21c"
+        />
+      </div>
+      <div class="titlebar-button" id="titlebar-maximize">
+        <img src="./assets/window-maximize.svg" alt="maximize" />
+      </div>
+      <div class="titlebar-button" id="titlebar-close">
+        <img style="width: 20px" src="./assets/close.svg" alt="close" />
+      </div>
+    </div>
+
+    <div class="container">
+      <h1>Welcome to Tauri!</h1>
+
+      <p>Click on the Tauri logo to learn more about the framework</p>
+
+      <form class="row" id="greet-form">
+        <div
+          class="mdl-textfield mdl-js-textfield mdl-textfield--floating-label"
+        >
+          <input id="greet-input" class="mdl-textfield__input" type="text" />
+          <label class="mdl-textfield__label" for="sample3">Text...</label>
+        </div>
+        <button
+          class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-button--accent"
+          style="width: 100px; background-color: #161616"
+          type="submit"
+        >
+          Button
+        </button>
+      </form>
+      <input
+        class="mdl-slider mdl-js-slider"
+        type="range"
+        min="0"
+        max="100"
+        value="100"
+        tabindex="0"
+        id="volume-slider"
+        onload="load_slider()"
+      />
+      <p id="greet-msg"></p>
+    </div>
+    <button onclick="pos()">POS</button>
+  </body>
+</html>
