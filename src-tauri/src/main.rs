@@ -1,7 +1,10 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use lofty::{read_from_path, AudioFile, FileProperties};
+use audiotags::Tag;
+use lofty::mpeg::MpegFile;
+use lofty::{read_from_path, AudioFile, ParseOptions, TagType};
+
 use rodio::Sink;
 use rodio::{source::Source, Decoder, OutputStream, OutputStreamHandle};
 use serde::{Deserialize, Serialize};
@@ -10,7 +13,7 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{thread, vec};
 
 use tauri::State;
@@ -18,7 +21,8 @@ use tauri::State;
 #[derive(Clone, Serialize, Deserialize)]
 struct Music {
     title: String,
-    duration: Duration,
+    properties: Option<Properties>,
+    started: Duration,
 }
 struct MusicPlayer<T> {
     playing: Arc<Mutex<Option<Music>>>,
@@ -98,7 +102,8 @@ impl MusicPlayer<String> {
 
                     sounds_to_play.push(Music {
                         title: path.clone(),
-                        duration: properties.duration(),
+                        properties: Some(properties),
+                        started: Duration::from_secs(0),
                     });
                 } else if data.action_type == MusicPlayerActions::Error {
                     if sounds_to_play.len() > 0 && play.empty() {
@@ -109,6 +114,8 @@ impl MusicPlayer<String> {
                         play.append(source);
 
                         play.play();
+
+                        sounds_to_play[0].started = get_timestamp();
 
                         playing = Some(sounds_to_play[0].clone());
                         sounds_to_play.remove(0);
@@ -160,6 +167,9 @@ impl MusicPlayer<String> {
         let queue = self.queue.lock().unwrap().to_vec();
         queue
     }
+    pub fn get_playing(&self) -> Option<Music> {
+        self.playing.lock().unwrap().clone()
+    }
     pub fn set_volume(&self, volume: f32) {
         self.tx
             .send(PlayerAction::new(
@@ -174,13 +184,52 @@ impl MusicPlayer<String> {
     }
 }
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
+#[derive(Clone, Serialize, Deserialize)]
+struct Properties {
+    title: Option<String>,
+    artist: Option<String>,
+    year: Option<i32>,
+    image: Option<Vec<u8>>,
+    duration: Option<f64>,
+}
+fn get_properties(path: String) -> Properties {
+    let mut tag = Tag::new().read_from_path(path.clone()).unwrap();
 
-fn get_properties(path: String) -> FileProperties {
-    let tagged_file = read_from_path(path).unwrap();
-    tagged_file.properties().to_owned()
+    let mut properties = Properties {
+        title: None,
+        artist: None,
+        year: tag.year(),
+        image: None,
+        duration: None,
+    };
+
+    if tag.album_cover() != None {
+        //properties.image = Some(tag.album_cover().unwrap().data.to_vec());
+    }
+    if tag.title() != None {
+        properties.artist = Some(tag.title().unwrap().to_string());
+    }
+    if tag.artist() != None {
+        properties.artist = Some(tag.artist().unwrap().to_string());
+    }
+    if tag.duration() == None {
+        let tagged_file = read_from_path(path.clone()).unwrap();
+        properties.duration = Some(tagged_file.properties().duration().as_secs() as f64);
+    } else {
+        properties.duration = tag.duration();
+    }
+
+    properties
 }
 fn path_exists(path: &str) -> bool {
     Path::new(path).exists()
+}
+fn get_timestamp() -> Duration {
+    let start = SystemTime::now();
+    let since_the_epoch = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    return since_the_epoch;
 }
 #[tauri::command]
 fn enqueue(path: &str, musicplayer: State<MusicPlayer<String>>) -> bool {
@@ -202,6 +251,10 @@ fn set_volume(musicplayer: State<MusicPlayer<String>>, volume: f32) {
 fn get_volume(musicplayer: State<MusicPlayer<String>>) -> f32 {
     musicplayer.get_volume()
 }
+#[tauri::command]
+fn get_playing(musicplayer: State<MusicPlayer<String>>) -> Option<Music> {
+    musicplayer.get_playing()
+}
 fn main() {
     let player = MusicPlayer::new();
     tauri::Builder::default()
@@ -210,6 +263,7 @@ fn main() {
             enqueue,
             get_queue_length,
             get_queue,
+            get_playing,
             set_volume,
             get_volume
         ])

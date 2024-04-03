@@ -30,6 +30,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     .addEventListener("submit", async (e) => {
       e.preventDefault();
       greet();
+      let ddd = await invoke("get_queue_length");
+      console.log(ddd);
     });
 });
 
@@ -44,4 +46,12 @@ window.addEventListener("load", async () => {
       volume: slider.val() / 100,
     });
   });
+
+  setInterval(async () => {
+    let ddd = await invoke("get_playing");
+
+    /*document.getElementById("snimka").src =
+      "data:image/png;base64," +
+      btoa(String.fromCharCode.apply(null, ddd.properties.image)); */
+  }, 1000);
 });
