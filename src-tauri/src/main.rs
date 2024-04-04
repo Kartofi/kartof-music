@@ -1,9 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use audiotags::Tag;
 use lofty::mpeg::MpegFile;
-use lofty::{read_from_path, AudioFile, ParseOptions, TagType};
+use lofty::{read_from_path, Accessor, AudioFile, ParseOptions, Picture, TagType, TaggedFileExt};
 
 use rodio::Sink;
 use rodio::{source::Source, Decoder, OutputStream, OutputStreamHandle};
@@ -20,7 +19,7 @@ use tauri::State;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Music {
-    title: String,
+    path: String,
     properties: Option<Properties>,
     started: Duration,
 }
@@ -75,7 +74,7 @@ impl MusicPlayer<String> {
             let (_stream, stream_handle): (OutputStream, OutputStreamHandle) =
                 OutputStream::try_default().unwrap();
             // Load a sound from a file, using a path relative to Cargo.toml
-            let file = BufReader::new(File::open("audios/sound.wav").unwrap());
+            let file = BufReader::new(File::open("audios/Oreo.mp3").unwrap());
 
             let play = stream_handle.play_once(file).unwrap();
             play.stop();
@@ -101,14 +100,14 @@ impl MusicPlayer<String> {
                     let properties = get_properties(path.clone());
 
                     sounds_to_play.push(Music {
-                        title: path.clone(),
+                        path: path.clone(),
                         properties: Some(properties),
                         started: Duration::from_secs(0),
                     });
                 } else if data.action_type == MusicPlayerActions::Error {
                     if sounds_to_play.len() > 0 && play.empty() {
                         let file =
-                            BufReader::new(File::open(sounds_to_play[0].title.clone()).unwrap());
+                            BufReader::new(File::open(sounds_to_play[0].path.clone()).unwrap());
                         let source = Decoder::new(file).unwrap();
 
                         play.append(source);
@@ -188,39 +187,64 @@ impl MusicPlayer<String> {
 struct Properties {
     title: Option<String>,
     artist: Option<String>,
-    year: Option<i32>,
-    image: Option<Vec<u8>>,
+    year: Option<u32>,
     duration: Option<f64>,
 }
 fn get_properties(path: String) -> Properties {
-    let mut tag = Tag::new().read_from_path(path.clone()).unwrap();
+    let tagged_file = read_from_path(path.clone()).unwrap();
+    let primary_tag_option: Option<&lofty::Tag> = tagged_file.primary_tag();
 
     let mut properties = Properties {
         title: None,
         artist: None,
-        year: tag.year(),
-        image: None,
+        year: None,
         duration: None,
     };
+    if primary_tag_option.is_none() == false {
+        let primary_tag = primary_tag_option.unwrap();
 
-    if tag.album_cover() != None {
-        //properties.image = Some(tag.album_cover().unwrap().data.to_vec());
-    }
-    if tag.title() != None {
-        properties.artist = Some(tag.title().unwrap().to_string());
-    }
-    if tag.artist() != None {
-        properties.artist = Some(tag.artist().unwrap().to_string());
-    }
-    if tag.duration() == None {
-        let tagged_file = read_from_path(path.clone()).unwrap();
+        let title = primary_tag.title();
+        if title.is_none() == false {
+            properties.title = Some(title.unwrap().to_string());
+        }
+
+        let artist = primary_tag.artist();
+        if artist.is_none() == false {
+            properties.artist = Some(artist.unwrap().to_string());
+        }
+
+        let title = primary_tag.title();
+        if title.is_none() == false {
+            properties.title = Some(title.unwrap().to_string());
+        }
+
+        let year = primary_tag.year();
+        if year.is_none() == false {
+            properties.year = Some(year.unwrap());
+        }
+
         properties.duration = Some(tagged_file.properties().duration().as_secs() as f64);
-    } else {
-        properties.duration = tag.duration();
     }
 
     properties
 }
+
+fn get_cover(path: String) -> Option<Vec<u8>> {
+    let tagged_file = read_from_path(path.clone()).unwrap();
+    let primary_tag_option: Option<&lofty::Tag> = tagged_file.primary_tag();
+
+    if primary_tag_option.is_none() == false {
+        let primary_tag = primary_tag_option.unwrap();
+        primary_tag.picture_count();
+        let pics: &[Picture] = primary_tag.pictures();
+        let first = pics.first();
+        if first != None {
+            return Some(first.unwrap().data().to_vec());
+        }
+    }
+    None
+}
+
 fn path_exists(path: &str) -> bool {
     Path::new(path).exists()
 }
@@ -255,6 +279,10 @@ fn get_volume(musicplayer: State<MusicPlayer<String>>) -> f32 {
 fn get_playing(musicplayer: State<MusicPlayer<String>>) -> Option<Music> {
     musicplayer.get_playing()
 }
+#[tauri::command]
+fn get_cover_(path: String) -> Option<Vec<u8>> {
+    get_cover(path)
+}
 fn main() {
     let player = MusicPlayer::new();
     tauri::Builder::default()
@@ -264,6 +292,7 @@ fn main() {
             get_queue_length,
             get_queue,
             get_playing,
+            get_cover_,
             set_volume,
             get_volume
         ])

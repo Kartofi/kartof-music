@@ -48,10 +48,9 @@ window.addEventListener("load", async () => {
   });
 
   setInterval(async () => {
-    let ddd = await invoke("get_playing");
+    let ddd = await invoke("get_cover_", { path: "audios/Hentai.mp3" });
 
-    /*document.getElementById("snimka").src =
-      "data:image/png;base64," +
-      btoa(String.fromCharCode.apply(null, ddd.properties.image)); */
+    document.getElementById("snimka").src =
+      "data:image/png;base64," + btoa(String.fromCharCode.apply(null, ddd));
   }, 1000);
 });
