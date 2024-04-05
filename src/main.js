@@ -30,8 +30,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     .addEventListener("submit", async (e) => {
       e.preventDefault();
       greet();
-      let ddd = await invoke("get_queue_length");
-      console.log(ddd);
+      let ddwd = await invoke("resume");
     });
 });
 
@@ -48,9 +47,15 @@ window.addEventListener("load", async () => {
   });
 
   setInterval(async () => {
-    let ddd = await invoke("get_cover_", { path: "audios/Hentai.mp3" });
+    /* let ddd = await invoke("get_cover_", { path: "audios/Hentai.mp3" });
 
     document.getElementById("snimka").src =
       "data:image/png;base64," + btoa(String.fromCharCode.apply(null, ddd));
+*/
+    let playing = await invoke("get_playing");
+    console.log(playing);
+
+    let qwe = await invoke("enqueue", { path: "audios/2D Cutie.mp3" });
+    //let ddwd = await invoke("pause");
   }, 1000);
 });

@@ -2,12 +2,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use lofty::mpeg::MpegFile;
-use lofty::{read_from_path, Accessor, AudioFile, ParseOptions, Picture, TagType, TaggedFileExt};
+use lofty::{
+    read_from_path, Accessor, AudioFile, ParseOptions, Picture, TagType, TaggedFile, TaggedFileExt,
+};
 
 use rodio::Sink;
 use rodio::{source::Source, Decoder, OutputStream, OutputStreamHandle};
 use serde::{Deserialize, Serialize};
-use std::fs::File;
+use std::fs::{self, File, ReadDir};
 use std::io::BufReader;
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -21,7 +23,7 @@ use tauri::State;
 struct Music {
     path: String,
     properties: Option<Properties>,
-    started: Duration,
+    position: u64,
 }
 struct MusicPlayer<T> {
     playing: Arc<Mutex<Option<Music>>>,
@@ -82,6 +84,9 @@ impl MusicPlayer<String> {
             let mut sounds_to_play: Vec<Music> = Vec::new();
 
             let mut playing: Option<Music> = None;
+
+            let mut started_playing = Instant::now();
+
             loop {
                 let data = rx
                     .recv_timeout(Duration::from_millis(10))
@@ -92,8 +97,11 @@ impl MusicPlayer<String> {
                 if data.action_type == MusicPlayerActions::Stop {
                     play.clear();
                     sounds_to_play.clear();
+                    playing = None;
                 } else if data.action_type == MusicPlayerActions::Resume {
                     play.play();
+                } else if data.action_type == MusicPlayerActions::Pause {
+                    play.pause();
                 } else if data.action_type == MusicPlayerActions::Enqueue {
                     let path = data.data.unwrap();
 
@@ -101,28 +109,34 @@ impl MusicPlayer<String> {
 
                     sounds_to_play.push(Music {
                         path: path.clone(),
-                        properties: Some(properties),
-                        started: Duration::from_secs(0),
+                        properties: Some(properties.clone()),
+                        position: 0,
                     });
-                } else if data.action_type == MusicPlayerActions::Error {
-                    if sounds_to_play.len() > 0 && play.empty() {
-                        let file =
-                            BufReader::new(File::open(sounds_to_play[0].path.clone()).unwrap());
-                        let source = Decoder::new(file).unwrap();
-
-                        play.append(source);
-
-                        play.play();
-
-                        sounds_to_play[0].started = get_timestamp();
-
-                        playing = Some(sounds_to_play[0].clone());
-                        sounds_to_play.remove(0);
-                    }
                 } else if data.action_type == MusicPlayerActions::Volume {
                     let volume: f32 = data.data.unwrap().parse().unwrap();
                     play.set_volume(volume);
                 }
+                if sounds_to_play.len() > 0 && play.empty() && play.is_paused() == false {
+                    let file = BufReader::new(File::open(sounds_to_play[0].path.clone()).unwrap());
+                    let source = Decoder::new(file).unwrap();
+
+                    play.append(source);
+
+                    play.play();
+
+                    started_playing = Instant::now();
+
+                    playing = Some(sounds_to_play[0].clone());
+                    sounds_to_play.remove(0);
+                } else if play.is_paused() == false && !play.empty() && playing.is_none() == false {
+                    let mut cloning = playing.clone().unwrap();
+
+                    cloning.position = started_playing.elapsed().as_secs();
+                    playing = Some(cloning);
+                } else {
+                    playing = None;
+                }
+
                 if let Ok(mut queue) = queue_clone.lock() {
                     *queue = sounds_to_play.clone();
                 }
@@ -151,6 +165,18 @@ impl MusicPlayer<String> {
             .unwrap();
         *self.is_playing.lock().unwrap() = true;
         true
+    }
+    pub fn resume(&self) {
+        self.tx
+            .send(PlayerAction::new(MusicPlayerActions::Resume, None))
+            .unwrap();
+        *self.is_playing.lock().unwrap() = true;
+    }
+    pub fn pause(&self) {
+        self.tx
+            .send(PlayerAction::new(MusicPlayerActions::Pause, None))
+            .unwrap();
+        *self.is_playing.lock().unwrap() = false;
     }
     pub fn stop(&self) {
         self.tx
@@ -191,8 +217,22 @@ struct Properties {
     duration: Option<f64>,
 }
 fn get_properties(path: String) -> Properties {
-    let tagged_file = read_from_path(path.clone()).unwrap();
-    let primary_tag_option: Option<&lofty::Tag> = tagged_file.primary_tag();
+    let tagged_file_result = read_from_path(path.clone());
+    let tagged_file: Option<TaggedFile> = match tagged_file_result {
+        Ok(data) => Some(data),
+        Err(err) => None,
+    };
+    if tagged_file.is_none() {
+        return Properties {
+            title: None,
+            artist: None,
+            year: None,
+            duration: None,
+        };
+    }
+    let unwraped_tagged_file = tagged_file.unwrap();
+
+    let primary_tag_option: Option<&lofty::Tag> = unwraped_tagged_file.primary_tag();
 
     let mut properties = Properties {
         title: None,
@@ -223,7 +263,7 @@ fn get_properties(path: String) -> Properties {
             properties.year = Some(year.unwrap());
         }
 
-        properties.duration = Some(tagged_file.properties().duration().as_secs() as f64);
+        properties.duration = Some(unwraped_tagged_file.properties().duration().as_secs() as f64);
     }
 
     properties
@@ -243,6 +283,33 @@ fn get_cover(path: String) -> Option<Vec<u8>> {
         }
     }
     None
+}
+
+fn get_available_musics(path: &str) -> Vec<Music> {
+    let mut result: Vec<Music> = Vec::new();
+
+    match fs::read_dir(path) {
+        Ok(data) => {
+            data.into_iter().for_each(|item| {
+                let path = item.unwrap().path();
+                let path_string = path.to_str().unwrap().to_owned();
+                println!("{}", path_string);
+                if !path_string.ends_with(".geetkeep") {
+                    let properties = get_properties(path_string.clone());
+                    let music = Music {
+                        path: path_string.clone(),
+                        properties: Some(properties.clone()),
+                        position: 0,
+                    };
+
+                    result.push(music);
+                }
+            });
+        }
+        Err(err) => println!("{}", err),
+    };
+
+    return result;
 }
 
 fn path_exists(path: &str) -> bool {
@@ -283,16 +350,31 @@ fn get_playing(musicplayer: State<MusicPlayer<String>>) -> Option<Music> {
 fn get_cover_(path: String) -> Option<Vec<u8>> {
     get_cover(path)
 }
+#[tauri::command]
+fn get_sounds() -> Vec<Music> {
+    get_available_musics("audios")
+}
+#[tauri::command]
+fn pause(musicplayer: State<MusicPlayer<String>>) {
+    musicplayer.pause();
+}
+#[tauri::command]
+fn resume(musicplayer: State<MusicPlayer<String>>) {
+    musicplayer.resume();
+}
 fn main() {
     let player = MusicPlayer::new();
     tauri::Builder::default()
         .manage(player)
         .invoke_handler(tauri::generate_handler![
             enqueue,
+            resume,
+            pause,
             get_queue_length,
             get_queue,
             get_playing,
             get_cover_,
+            get_sounds,
             set_volume,
             get_volume
         ])
