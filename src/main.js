@@ -30,7 +30,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     .addEventListener("submit", async (e) => {
       e.preventDefault();
       greet();
-      let ddwd = await invoke("resume");
     });
 });
 
@@ -45,17 +44,4 @@ window.addEventListener("load", async () => {
       volume: slider.val() / 100,
     });
   });
-
-  setInterval(async () => {
-    /* let ddd = await invoke("get_cover_", { path: "audios/Hentai.mp3" });
-
-    document.getElementById("snimka").src =
-      "data:image/png;base64," + btoa(String.fromCharCode.apply(null, ddd));
-*/
-    let playing = await invoke("get_playing");
-    console.log(playing);
-
-    let qwe = await invoke("enqueue", { path: "audios/2D Cutie.mp3" });
-    //let ddwd = await invoke("pause");
-  }, 1000);
 });

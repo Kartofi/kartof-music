@@ -30,6 +30,38 @@
 
         console.log(data);
       }
+      async function resume() {
+        let ddwd = await invoke("resume");
+      }
+      async function pause() {
+        let ddwd = await invoke("pause");
+      }
+      async function enqueue() {
+        let qwe = await invoke("enqueue", { path: "audios/2D Cutie.mp3" });
+      }
+      async function skip() {
+        let qwe = await invoke("skip");
+      }
+      async function get_playing() {
+        let qwe = await invoke("get_playing");
+        document.getElementById("title").textContent = qwe.properties.title;
+        document.getElementById("artist").textContent = qwe.properties.artist;
+        document.getElementById("duration").textContent =
+          qwe.properties.duration;
+        let cover = await invoke("get_cover_", { path: qwe.path });
+        document.getElementById("cover").src =
+          "data:image/png;base64," + arrayBufferToBase64(cover);
+        console.log(qwe);
+      }
+      function arrayBufferToBase64(arrayBuffer) {
+        let binary = "";
+        const bytes = new Uint8Array(arrayBuffer);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return window.btoa(binary);
+      }
     </script>
   </head>
 
@@ -82,7 +114,18 @@
       />
       <p id="greet-msg"></p>
     </div>
+    <div>
+      <a id="title"></a><br />
+      <a id="artist"></a><br />
+      <a id="duration"></a><br />
+      <img id="cover" />
+    </div>
     <button onclick="pos()">POS</button>
-    <img id="snimka">
+    <button onclick="skip()">Skip</button>
+    <button onclick="pause()">Pause</button>
+    <button onclick="resume()">Resume</button>
+    <button onclick="enqueue()">Enqueue</button>
+    <button onclick="get_playing()">Get Playing</button>
+    <img id="snimka" />
   </body>
 </html>

@@ -24,10 +24,10 @@ struct Music {
     path: String,
     properties: Option<Properties>,
     position: u64,
+    playing: bool,
 }
 struct MusicPlayer<T> {
     playing: Arc<Mutex<Option<Music>>>,
-    is_playing: Mutex<bool>,
     queue: Arc<Mutex<Vec<Music>>>,
     volume: Mutex<f32>,
 
@@ -41,7 +41,8 @@ enum MusicPlayerActions {
     Stop = 2,
     Pause = 3,
     Resume = 4,
-    Volume = 5,
+    Skip = 5,
+    Volume = 6,
 }
 
 struct PlayerAction<T> {
@@ -86,6 +87,8 @@ impl MusicPlayer<String> {
             let mut playing: Option<Music> = None;
 
             let mut started_playing = Instant::now();
+            let mut paused_duration = Duration::from_secs(0);
+            let mut started_paused = Instant::now();
 
             loop {
                 let data = rx
@@ -99,9 +102,26 @@ impl MusicPlayer<String> {
                     sounds_to_play.clear();
                     playing = None;
                 } else if data.action_type == MusicPlayerActions::Resume {
-                    play.play();
+                    if play.is_paused() {
+                        paused_duration = started_paused.elapsed();
+                    }
+                    if playing.is_none() == false {
+                        let mut cloning = playing.clone().unwrap();
+                        cloning.playing = true;
+                        playing = Some(cloning);
+
+                        play.play();
+                    }
                 } else if data.action_type == MusicPlayerActions::Pause {
-                    play.pause();
+                    if playing.is_none() == false {
+                        play.pause();
+                        started_paused = Instant::now();
+                        let mut cloning = playing.clone().unwrap();
+                        cloning.playing = false;
+                        playing = Some(cloning);
+                    }
+                } else if data.action_type == MusicPlayerActions::Skip {
+                    play.skip_one();
                 } else if data.action_type == MusicPlayerActions::Enqueue {
                     let path = data.data.unwrap();
 
@@ -111,6 +131,7 @@ impl MusicPlayer<String> {
                         path: path.clone(),
                         properties: Some(properties.clone()),
                         position: 0,
+                        playing: false,
                     });
                 } else if data.action_type == MusicPlayerActions::Volume {
                     let volume: f32 = data.data.unwrap().parse().unwrap();
@@ -125,15 +146,16 @@ impl MusicPlayer<String> {
                     play.play();
 
                     started_playing = Instant::now();
-
+                    sounds_to_play[0].playing = true;
                     playing = Some(sounds_to_play[0].clone());
                     sounds_to_play.remove(0);
                 } else if play.is_paused() == false && !play.empty() && playing.is_none() == false {
                     let mut cloning = playing.clone().unwrap();
-
+                    started_playing += paused_duration;
                     cloning.position = started_playing.elapsed().as_secs();
+                    paused_duration = Duration::from_secs(0);
                     playing = Some(cloning);
-                } else {
+                } else if sounds_to_play.len() == 0 && play.empty() {
                     playing = None;
                 }
 
@@ -148,7 +170,6 @@ impl MusicPlayer<String> {
 
         MusicPlayer {
             playing: playing,
-            is_playing: Default::default(),
             queue: queue,
             volume: Mutex::from(1.0),
 
@@ -163,26 +184,27 @@ impl MusicPlayer<String> {
         self.tx
             .send(PlayerAction::new(MusicPlayerActions::Enqueue, Some(path)))
             .unwrap();
-        *self.is_playing.lock().unwrap() = true;
         true
     }
     pub fn resume(&self) {
         self.tx
             .send(PlayerAction::new(MusicPlayerActions::Resume, None))
             .unwrap();
-        *self.is_playing.lock().unwrap() = true;
     }
     pub fn pause(&self) {
         self.tx
             .send(PlayerAction::new(MusicPlayerActions::Pause, None))
             .unwrap();
-        *self.is_playing.lock().unwrap() = false;
+    }
+    pub fn skip(&self) {
+        self.tx
+            .send(PlayerAction::new(MusicPlayerActions::Skip, None))
+            .unwrap();
     }
     pub fn stop(&self) {
         self.tx
             .send(PlayerAction::new(MusicPlayerActions::Stop, None))
             .unwrap();
-        *self.is_playing.lock().unwrap() = false;
     }
     pub fn get_queue_length(&self) -> usize {
         let length = self.queue.lock().unwrap().len();
@@ -300,6 +322,7 @@ fn get_available_musics(path: &str) -> Vec<Music> {
                         path: path_string.clone(),
                         properties: Some(properties.clone()),
                         position: 0,
+                        playing: false,
                     };
 
                     result.push(music);
@@ -362,6 +385,10 @@ fn pause(musicplayer: State<MusicPlayer<String>>) {
 fn resume(musicplayer: State<MusicPlayer<String>>) {
     musicplayer.resume();
 }
+#[tauri::command]
+fn skip(musicplayer: State<MusicPlayer<String>>) {
+    musicplayer.skip();
+}
 fn main() {
     let player = MusicPlayer::new();
     tauri::Builder::default()
@@ -370,6 +397,7 @@ fn main() {
             enqueue,
             resume,
             pause,
+            skip,
             get_queue_length,
             get_queue,
             get_playing,
