@@ -138,6 +138,10 @@ impl MusicPlayer<String> {
                     play.set_volume(volume);
                 }
                 if sounds_to_play.len() > 0 && play.empty() && play.is_paused() == false {
+                    if path_exists(&sounds_to_play[0].path) == false {
+                        sounds_to_play.remove(0);
+                        continue;
+                    }
                     let file = BufReader::new(File::open(sounds_to_play[0].path.clone()).unwrap());
                     let source = Decoder::new(file).unwrap();
 
@@ -315,7 +319,6 @@ fn get_available_musics(path: &str) -> Vec<Music> {
             data.into_iter().for_each(|item| {
                 let path = item.unwrap().path();
                 let path_string = path.to_str().unwrap().to_owned();
-                println!("{}", path_string);
                 if !path_string.ends_with(".geetkeep") {
                     let properties = get_properties(path_string.clone());
                     let music = Music {

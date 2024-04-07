@@ -25,19 +25,34 @@
     <script>
       const { invoke } = window.__TAURI__.tauri;
 
-      async function pos() {
-        let data = await invoke("get_queue");
+      async function get_sounds() {
+        let data = await invoke("get_sounds");
+        document.getElementById("available-songs").innerHTML = data
+          .map((item) => {
+            return (
+              "<a onclick=\"enqueue('" +
+              item.path +
+              "')\">" +
+              (item.properties.title ||
+                item.path.split("\\")[1].split(".")[0]) +
+              "</a><br>"
+            );
+          })
+          .join("");
 
         console.log(data);
       }
+
       async function resume() {
         let ddwd = await invoke("resume");
       }
       async function pause() {
         let ddwd = await invoke("pause");
       }
-      async function enqueue() {
-        let qwe = await invoke("enqueue", { path: "audios/2D Cutie.mp3" });
+      async function enqueue(path) {
+        let qwe = await invoke("enqueue", {
+          path: "audios/" + path.split("audios")[1],
+        });
       }
       async function skip() {
         let qwe = await invoke("skip");
@@ -120,7 +135,8 @@
       <a id="duration"></a><br />
       <img id="cover" />
     </div>
-    <button onclick="pos()">POS</button>
+    <div id="available-songs"></div>
+    <button onclick="get_sounds()">Get Available</button>
     <button onclick="skip()">Skip</button>
     <button onclick="pause()">Pause</button>
     <button onclick="resume()">Resume</button>
