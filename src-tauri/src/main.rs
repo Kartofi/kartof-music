@@ -77,10 +77,8 @@ impl MusicPlayer<String> {
             let (_stream, stream_handle): (OutputStream, OutputStreamHandle) =
                 OutputStream::try_default().unwrap();
             // Load a sound from a file, using a path relative to Cargo.toml
-            let file = BufReader::new(File::open("audios/Oreo.mp3").unwrap());
 
-            let play = stream_handle.play_once(file).unwrap();
-            play.stop();
+            let play = Sink::try_new(&stream_handle).unwrap();
 
             let mut sounds_to_play: Vec<Music> = Vec::new();
 
@@ -125,7 +123,7 @@ impl MusicPlayer<String> {
                 } else if data.action_type == MusicPlayerActions::Enqueue {
                     let path = data.data.unwrap();
 
-                    let properties = get_properties(path.clone());
+                    let properties = Utils.get_properties(path.clone());
 
                     sounds_to_play.push(Music {
                         path: path.clone(),
@@ -138,7 +136,7 @@ impl MusicPlayer<String> {
                     play.set_volume(volume);
                 }
                 if sounds_to_play.len() > 0 && play.empty() && play.is_paused() == false {
-                    if path_exists(&sounds_to_play[0].path) == false {
+                    if Utils.path_exists(&sounds_to_play[0].path) == false {
                         sounds_to_play.remove(0);
                         continue;
                     }
@@ -182,7 +180,7 @@ impl MusicPlayer<String> {
         }
     }
     pub fn enqueue(&self, path: String) -> bool {
-        if !path_exists(&path) {
+        if !Utils.path_exists(&path) {
             return false;
         }
         self.tx
@@ -234,6 +232,118 @@ impl MusicPlayer<String> {
         *self.volume.lock().unwrap()
     }
 }
+
+struct Utils;
+impl Utils {
+    pub fn get_properties(self, path: String) -> Properties {
+        let tagged_file_result = read_from_path(path.clone());
+        let tagged_file: Option<TaggedFile> = match tagged_file_result {
+            Ok(data) => Some(data),
+            Err(err) => None,
+        };
+        if tagged_file.is_none() {
+            return Properties {
+                title: None,
+                artist: None,
+                year: None,
+                duration: None,
+            };
+        }
+        let unwraped_tagged_file = tagged_file.unwrap();
+
+        let primary_tag_option: Option<&lofty::Tag> = unwraped_tagged_file.primary_tag();
+
+        let mut properties = Properties {
+            title: None,
+            artist: None,
+            year: None,
+            duration: None,
+        };
+        if primary_tag_option.is_none() == false {
+            let primary_tag = primary_tag_option.unwrap();
+
+            let title = primary_tag.title();
+            if title.is_none() == false {
+                properties.title = Some(title.unwrap().to_string());
+            }
+
+            let artist = primary_tag.artist();
+            if artist.is_none() == false {
+                properties.artist = Some(artist.unwrap().to_string());
+            }
+
+            let title = primary_tag.title();
+            if title.is_none() == false {
+                properties.title = Some(title.unwrap().to_string());
+            }
+
+            let year = primary_tag.year();
+            if year.is_none() == false {
+                properties.year = Some(year.unwrap());
+            }
+
+            properties.duration =
+                Some(unwraped_tagged_file.properties().duration().as_secs() as f64);
+        }
+
+        properties
+    }
+
+    pub fn get_cover(self, path: String) -> Option<Vec<u8>> {
+        let tagged_file = read_from_path(path.clone()).unwrap();
+        let primary_tag_option: Option<&lofty::Tag> = tagged_file.primary_tag();
+
+        if primary_tag_option.is_none() == false {
+            let primary_tag = primary_tag_option.unwrap();
+            primary_tag.picture_count();
+            let pics: &[Picture] = primary_tag.pictures();
+            let first = pics.first();
+            if first != None {
+                return Some(first.unwrap().data().to_vec());
+            }
+        }
+        None
+    }
+
+    pub fn get_available_musics(&self, path: &str) -> Vec<Music> {
+        let mut result: Vec<Music> = Vec::new();
+
+        match fs::read_dir(path) {
+            Ok(data) => {
+                data.into_iter().for_each(|item| {
+                    let path = item.unwrap().path();
+                    let path_string = path.to_str().unwrap().to_owned();
+                    if !path_string.ends_with(".geetkeep") {
+                        let properties = Self.get_properties(path_string.clone());
+                        let music = Music {
+                            path: path_string.clone(),
+                            properties: Some(properties.clone()),
+                            position: 0,
+                            playing: false,
+                        };
+
+                        result.push(music);
+                    }
+                });
+            }
+            Err(err) => println!("{}", err),
+        };
+
+        return result;
+    }
+
+    pub fn path_exists(self, path: &str) -> bool {
+        Path::new(path).exists()
+    }
+    pub fn get_timestamp(self) -> Duration {
+        let start = SystemTime::now();
+        let since_the_epoch = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        return since_the_epoch;
+    }
+}
+
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 #[derive(Clone, Serialize, Deserialize)]
 struct Properties {
@@ -242,112 +352,7 @@ struct Properties {
     year: Option<u32>,
     duration: Option<f64>,
 }
-fn get_properties(path: String) -> Properties {
-    let tagged_file_result = read_from_path(path.clone());
-    let tagged_file: Option<TaggedFile> = match tagged_file_result {
-        Ok(data) => Some(data),
-        Err(err) => None,
-    };
-    if tagged_file.is_none() {
-        return Properties {
-            title: None,
-            artist: None,
-            year: None,
-            duration: None,
-        };
-    }
-    let unwraped_tagged_file = tagged_file.unwrap();
 
-    let primary_tag_option: Option<&lofty::Tag> = unwraped_tagged_file.primary_tag();
-
-    let mut properties = Properties {
-        title: None,
-        artist: None,
-        year: None,
-        duration: None,
-    };
-    if primary_tag_option.is_none() == false {
-        let primary_tag = primary_tag_option.unwrap();
-
-        let title = primary_tag.title();
-        if title.is_none() == false {
-            properties.title = Some(title.unwrap().to_string());
-        }
-
-        let artist = primary_tag.artist();
-        if artist.is_none() == false {
-            properties.artist = Some(artist.unwrap().to_string());
-        }
-
-        let title = primary_tag.title();
-        if title.is_none() == false {
-            properties.title = Some(title.unwrap().to_string());
-        }
-
-        let year = primary_tag.year();
-        if year.is_none() == false {
-            properties.year = Some(year.unwrap());
-        }
-
-        properties.duration = Some(unwraped_tagged_file.properties().duration().as_secs() as f64);
-    }
-
-    properties
-}
-
-fn get_cover(path: String) -> Option<Vec<u8>> {
-    let tagged_file = read_from_path(path.clone()).unwrap();
-    let primary_tag_option: Option<&lofty::Tag> = tagged_file.primary_tag();
-
-    if primary_tag_option.is_none() == false {
-        let primary_tag = primary_tag_option.unwrap();
-        primary_tag.picture_count();
-        let pics: &[Picture] = primary_tag.pictures();
-        let first = pics.first();
-        if first != None {
-            return Some(first.unwrap().data().to_vec());
-        }
-    }
-    None
-}
-
-fn get_available_musics(path: &str) -> Vec<Music> {
-    let mut result: Vec<Music> = Vec::new();
-
-    match fs::read_dir(path) {
-        Ok(data) => {
-            data.into_iter().for_each(|item| {
-                let path = item.unwrap().path();
-                let path_string = path.to_str().unwrap().to_owned();
-                if !path_string.ends_with(".geetkeep") {
-                    let properties = get_properties(path_string.clone());
-                    let music = Music {
-                        path: path_string.clone(),
-                        properties: Some(properties.clone()),
-                        position: 0,
-                        playing: false,
-                    };
-
-                    result.push(music);
-                }
-            });
-        }
-        Err(err) => println!("{}", err),
-    };
-
-    return result;
-}
-
-fn path_exists(path: &str) -> bool {
-    Path::new(path).exists()
-}
-fn get_timestamp() -> Duration {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-    return since_the_epoch;
-}
 #[tauri::command]
 fn enqueue(path: &str, musicplayer: State<MusicPlayer<String>>) -> bool {
     musicplayer.enqueue(path.to_string())
@@ -373,12 +378,12 @@ fn get_playing(musicplayer: State<MusicPlayer<String>>) -> Option<Music> {
     musicplayer.get_playing()
 }
 #[tauri::command]
-fn get_cover_(path: String) -> Option<Vec<u8>> {
-    get_cover(path)
+fn get_cover(path: String) -> Option<Vec<u8>> {
+    Utils.get_cover(path)
 }
 #[tauri::command]
 fn get_sounds() -> Vec<Music> {
-    get_available_musics("audios")
+    Utils.get_available_musics("audios")
 }
 #[tauri::command]
 fn pause(musicplayer: State<MusicPlayer<String>>) {
@@ -404,7 +409,7 @@ fn main() {
             get_queue_length,
             get_queue,
             get_playing,
-            get_cover_,
+            get_cover,
             get_sounds,
             set_volume,
             get_volume

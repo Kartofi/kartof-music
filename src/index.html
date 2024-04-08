@@ -63,7 +63,7 @@
         document.getElementById("artist").textContent = qwe.properties.artist;
         document.getElementById("duration").textContent =
           qwe.properties.duration;
-        let cover = await invoke("get_cover_", { path: qwe.path });
+        let cover = await invoke("get_cover", { path: qwe.path });
         document.getElementById("cover").src =
           "data:image/png;base64," + arrayBufferToBase64(cover);
         console.log(qwe);
