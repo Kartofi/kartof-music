@@ -58,15 +58,8 @@
         let qwe = await invoke("skip");
       }
       async function get_playing() {
-        let qwe = await invoke("get_playing");
-        document.getElementById("title").textContent = qwe.properties.title;
-        document.getElementById("artist").textContent = qwe.properties.artist;
-        document.getElementById("duration").textContent =
-          qwe.properties.duration;
-        let cover = await invoke("get_cover", { path: qwe.path });
-        document.getElementById("cover").src =
-          "data:image/png;base64," + arrayBufferToBase64(cover);
-        console.log(qwe);
+        let data = await invoke("get_playing");
+        return data;
       }
       function arrayBufferToBase64(arrayBuffer) {
         let binary = "";
@@ -77,10 +70,33 @@
         }
         return window.btoa(binary);
       }
+      let playing = undefined;
+      let interval = setInterval(async () => {
+        let data = await get_playing();
+        if (playing == undefined || playing.path != data.path) {
+          playing = data;
+
+          let cover = await invoke("get_cover", { path: data.path });
+          document.getElementById("title").textContent = data.properties.title;
+          document.getElementById("artist").textContent =
+            data.properties.artist;
+          document.getElementById("duration").value =
+            (data.position / data.properties.duration) * 100;
+
+          document.getElementById("cover").src =
+            "data:image/png;base64," + arrayBufferToBase64(cover);
+        } else if (data.position != playing.position) {
+          document.getElementById("duration").value =
+            (data.position / data.properties.duration) * 100;
+        }
+      }, 100);
+      function clear() {
+        clearInterval(interval);
+      }
     </script>
   </head>
 
-  <body>
+  <body onbeforeunload="clear()">
     <div data-tauri-drag-region class="titlebar">
       <div class="titlebar-button" id="titlebar-minimize">
         <img
@@ -132,8 +148,9 @@
     <div>
       <a id="title"></a><br />
       <a id="artist"></a><br />
-      <a id="duration"></a><br />
-      <img id="cover" />
+
+      <progress id="duration" value="0" max="100">32%</progress><br />
+      <img src="assets/no-music.svg" width="512px" id="cover" />
     </div>
     <div id="available-songs"></div>
     <button onclick="get_sounds()">Get Available</button>

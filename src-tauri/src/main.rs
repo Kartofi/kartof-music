@@ -6,7 +6,7 @@ use lofty::{
     read_from_path, Accessor, AudioFile, ParseOptions, Picture, TagType, TaggedFile, TaggedFileExt,
 };
 
-use rodio::Sink;
+use rodio::{source, Sink};
 use rodio::{source::Source, Decoder, OutputStream, OutputStreamHandle};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, ReadDir};
@@ -95,53 +95,70 @@ impl MusicPlayer<String> {
                         action_type: MusicPlayerActions::Error,
                         data: None,
                     });
-                if data.action_type == MusicPlayerActions::Stop {
-                    play.clear();
-                    sounds_to_play.clear();
-                    playing = None;
-                } else if data.action_type == MusicPlayerActions::Resume {
-                    if play.is_paused() {
-                        paused_duration = started_paused.elapsed();
+                match data.action_type {
+                    MusicPlayerActions::Stop => {
+                        play.clear();
+                        sounds_to_play.clear();
+                        playing = None;
                     }
-                    if playing.is_none() == false {
-                        let mut cloning = playing.clone().unwrap();
-                        cloning.playing = true;
-                        playing = Some(cloning);
+                    MusicPlayerActions::Resume => {
+                        if play.is_paused() {
+                            paused_duration = started_paused.elapsed();
+                        }
+                        if playing.is_none() == false {
+                            let mut cloning = playing.clone().unwrap();
+                            cloning.playing = true;
+                            playing = Some(cloning);
 
-                        play.play();
+                            play.play();
+                        }
                     }
-                } else if data.action_type == MusicPlayerActions::Pause {
-                    if playing.is_none() == false {
-                        play.pause();
-                        started_paused = Instant::now();
-                        let mut cloning = playing.clone().unwrap();
-                        cloning.playing = false;
-                        playing = Some(cloning);
+                    MusicPlayerActions::Pause => {
+                        if playing.is_none() == false {
+                            play.pause();
+                            started_paused = Instant::now();
+                            let mut cloning = playing.clone().unwrap();
+                            cloning.playing = false;
+                            playing = Some(cloning);
+                        }
                     }
-                } else if data.action_type == MusicPlayerActions::Skip {
-                    play.skip_one();
-                } else if data.action_type == MusicPlayerActions::Enqueue {
-                    let path = data.data.unwrap();
+                    MusicPlayerActions::Skip => {
+                        play.skip_one();
+                    }
+                    MusicPlayerActions::Enqueue => {
+                        let path = data.data.unwrap();
 
-                    let properties = Utils.get_properties(path.clone());
+                        let properties = Utils.get_properties(path.clone());
 
-                    sounds_to_play.push(Music {
-                        path: path.clone(),
-                        properties: Some(properties.clone()),
-                        position: 0,
-                        playing: false,
-                    });
-                } else if data.action_type == MusicPlayerActions::Volume {
-                    let volume: f32 = data.data.unwrap().parse().unwrap();
-                    play.set_volume(volume);
+                        sounds_to_play.push(Music {
+                            path: path.clone(),
+                            properties: Some(properties.clone()),
+                            position: 0,
+                            playing: false,
+                        });
+                    }
+                    MusicPlayerActions::Volume => {
+                        let volume: f32 = data.data.unwrap().parse().unwrap();
+                        play.set_volume(volume);
+                    }
+                    MusicPlayerActions::Error => {}
                 }
+
                 if sounds_to_play.len() > 0 && play.empty() && play.is_paused() == false {
                     if Utils.path_exists(&sounds_to_play[0].path) == false {
                         sounds_to_play.remove(0);
                         continue;
                     }
                     let file = BufReader::new(File::open(sounds_to_play[0].path.clone()).unwrap());
-                    let source = Decoder::new(file).unwrap();
+                    let source;
+                    match Decoder::new(file) {
+                        Ok(decoder) => source = decoder,
+                        Err(err) => {
+                            eprintln!("Error decoding file: {}", err);
+                            sounds_to_play.remove(0);
+                            continue;
+                        }
+                    };
 
                     play.append(source);
 
