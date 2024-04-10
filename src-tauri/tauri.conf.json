@@ -24,7 +24,8 @@
         "resizable": true,
         "title": "kartof-music",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "maxWidth": 968
       }
     ],
     "security": {

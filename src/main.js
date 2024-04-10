@@ -14,25 +14,6 @@ document
   .getElementById("titlebar-close")
   .addEventListener("click", () => appWindow.close());
 
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-  greetMsgEl.textContent = await invoke("enqueue", {
-    path: greetInputEl.value,
-  });
-}
-
-window.addEventListener("DOMContentLoaded", async () => {
-  greetInputEl = document.querySelector("#greet-input");
-  greetMsgEl = document.querySelector("#greet-msg");
-
-  document
-    .querySelector("#greet-form")
-    .addEventListener("submit", async (e) => {
-      e.preventDefault();
-      greet();
-    });
-});
-
 window.addEventListener("load", async () => {
   var slider = $("#volume-slider");
   let current_volume = await invoke("get_volume");
