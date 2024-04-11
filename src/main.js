@@ -7,9 +7,11 @@ const { appWindow } = window.__TAURI__.window;
 document
   .getElementById("titlebar-minimize")
   .addEventListener("click", () => appWindow.minimize());
-document
-  .getElementById("titlebar-maximize")
-  .addEventListener("click", () => appWindow.toggleMaximize());
+document.getElementById("titlebar-maximize").addEventListener("click", () => {
+  appWindow.setResizable(true);
+  appWindow.maximize();
+  appWindow.setResizable(false);
+});
 document
   .getElementById("titlebar-close")
   .addEventListener("click", () => appWindow.close());

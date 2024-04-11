@@ -80,9 +80,8 @@
           }
           let cover = await invoke("get_cover", { path: data.path });
           document.getElementById("title").textContent = data.properties.title;
-          document.getElementById("artist").textContent = data.properties.artist
-            .split("/")
-            .join(", ");
+          document.getElementById("artist").textContent =
+            "By " + data.properties.artist.split("/").join(", ");
           document.getElementById("duration").value =
             (data.position / data.properties.duration) * 100;
 
@@ -117,12 +116,11 @@
     </div>
     <p style="height: 50px"></p>
     <div class="container-playing">
-      <div class="controls"></div>
-      <p class="volume-slider">
+      <p class="controls">
         <a id="title"></a><br />
         <a id="artist"></a><br />
 
-        <progress id="duration" value="0" max="100">32%</progress>
+        <progress id="duration" value="0" max="100"></progress>
 
         <input
           class="mdl-slider mdl-js-slider"
