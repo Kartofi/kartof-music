@@ -10,7 +10,6 @@ document
 document.getElementById("titlebar-maximize").addEventListener("click", () => {
   appWindow.setResizable(true);
   appWindow.maximize();
-  appWindow.setResizable(false);
 });
 document
   .getElementById("titlebar-close")

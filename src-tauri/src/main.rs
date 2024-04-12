@@ -403,13 +403,18 @@ fn get_sounds() -> Vec<Music> {
     Utils.get_available_musics("audios")
 }
 #[tauri::command]
-fn pause(musicplayer: State<MusicPlayer<String>>) {
-    musicplayer.pause();
+fn toggle_pause(musicplayer: State<MusicPlayer<String>>) -> bool {
+    let playing = musicplayer.get_playing();
+
+    if playing.is_none() || playing.unwrap().playing == false {
+        musicplayer.resume();
+        return true;
+    } else {
+        musicplayer.pause();
+        return false;
+    }
 }
-#[tauri::command]
-fn resume(musicplayer: State<MusicPlayer<String>>) {
-    musicplayer.resume();
-}
+
 #[tauri::command]
 fn skip(musicplayer: State<MusicPlayer<String>>) {
     musicplayer.skip();
@@ -420,8 +425,7 @@ fn main() {
         .manage(player)
         .invoke_handler(tauri::generate_handler![
             enqueue,
-            resume,
-            pause,
+            toggle_pause,
             skip,
             get_queue_length,
             get_queue,

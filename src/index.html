@@ -39,12 +39,6 @@
         console.log(data);
       }
 
-      async function resume() {
-        let ddwd = await invoke("resume");
-      }
-      async function pause() {
-        let ddwd = await invoke("pause");
-      }
       async function enqueue(path) {
         let qwe = await invoke("enqueue", {
           path: "audios/" + path.split("audios")[1],
@@ -66,34 +60,76 @@
         }
         return window.btoa(binary);
       }
-      let playing = undefined;
+      let playing = null;
+
+      async function togglePause() {
+        let new_state = await invoke("toggle_pause");
+
+        if (new_state == true) {
+          document.getElementById("togglePause").textContent = "Playing";
+        } else {
+          document.getElementById("togglePause").textContent = "Paused";
+        }
+      }
+
       let interval = setInterval(async () => {
         let data = await get_playing();
-        if (
-          playing == undefined ||
-          playing == null ||
-          playing.path != data.path
-        ) {
+        if (data == null) {
+          clearPlayingDisplay();
+          playing = null;
+          return;
+        }
+        if (playing == null || playing.path != data.path) {
           playing = data;
-          if (data == undefined) {
-            return;
-          }
+
           let cover = await invoke("get_cover", { path: data.path });
           document.getElementById("title").textContent = data.properties.title;
           document.getElementById("artist").textContent =
             "By " + data.properties.artist.split("/").join(", ");
           document.getElementById("duration").value =
             (data.position / data.properties.duration) * 100;
+          document.getElementById("time").textContent =
+            convertStoMs(data.position) +
+            " / " +
+            convertStoMs(data.properties.duration);
 
           document.getElementById("cover").src =
             "data:image/png;base64," + arrayBufferToBase64(cover);
-        } else if (data.position != playing.position) {
+
+          if (data.playing == true) {
+            document.getElementById("togglePause").textContent = "Playing";
+          } else {
+            document.getElementById("togglePause").textContent = "Paused";
+          }
+        } else if (data != null && data.position != playing.position) {
           document.getElementById("duration").value =
             (data.position / data.properties.duration) * 100;
+
+          document.getElementById("time").textContent =
+            convertStoMs(data.position) +
+            " / " +
+            convertStoMs(data.properties.duration);
+        } else if (data == null) {
+          clearPlayingDisplay();
         }
       }, 100);
       function clear() {
         clearInterval(interval);
+      }
+      function clearPlayingDisplay() {
+        document.getElementById("title").textContent = "Nothing playing 🎧";
+        document.getElementById("artist").textContent = "";
+        document.getElementById("duration").value = 100;
+        document.getElementById("time").textContent = "00:00 / 00:00";
+
+        document.getElementById("cover").src = "./assets/no-music.svg";
+      }
+      function convertStoMs(seconds) {
+        let minutes = Math.floor(seconds / 60);
+        let extraSeconds = seconds % 60;
+        minutes = minutes < 10 ? "0" + minutes : minutes;
+        extraSeconds = extraSeconds < 10 ? "0" + extraSeconds : extraSeconds;
+        return minutes + ":" + extraSeconds;
       }
     </script>
   </head>
@@ -119,7 +155,7 @@
       <p class="controls">
         <a id="title"></a><br />
         <a id="artist"></a><br />
-
+        <a id="time">0:00 / 0:00</a>
         <progress id="duration" value="0" max="100"></progress>
 
         <input
@@ -141,8 +177,7 @@
     <div id="available-songs"></div>
     <button onclick="get_sounds()">Get Available</button>
     <button onclick="skip()">Skip</button>
-    <button onclick="pause()">Pause</button>
-    <button onclick="resume()">Resume</button>
+    <button id="togglePause" onclick="togglePause()">Pause</button>
     <button onclick="enqueue()">Enqueue</button>
     <button onclick="get_playing()">Get Playing</button>
 

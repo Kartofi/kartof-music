@@ -112,8 +112,14 @@ progress::-webkit-progress-value {
 
 #duration {
   position: absolute;
-  top: 200px;
+  top: 250px;
   width: 100%;
+}
+#time {
+  position: absolute;
+  top: 220px;
+  width: 100%;
+  text-align: center;
 }
 #playing > img {
   border-radius: 10px;
